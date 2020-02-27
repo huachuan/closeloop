@@ -50,6 +50,23 @@
 #include "Test.h"
 #include "Mapping.h"
 #include "Definition.h"
+#include "src/linalg.h"
+
+void orthogonal_(alglib::real_2d_array &A, int m, int n){
+	alglib::real_2d_array A_full_rank_orthogonal;
+	alglib::rmatrixrndorthogonal(m, A_full_rank_orthogonal);
+	for (int i = 0; i < m; ++i) {
+		for (int j = 0; j < n; ++j) {
+			A[i][j] = A_full_rank_orthogonal[i][j];
+		}
+	}
+}
+
+void ones(alglib::real_2d_array &A, int m){
+	for (int i = 0; i < m; ++i){
+		A[i][i] = 1.0;
+	}
+}
 
 int main() {
 	gen.seed(0);
@@ -116,8 +133,28 @@ int main() {
 	if (param->useHardwareInTraining) { WeightToConductance(); }
 
 	srand(0);	// Pseudorandom number seed
+
+	// new code of sbpca by Yin on 12/17/2019
+	int batch_size = 1;
+	int subBatchSize = 1;
+	int numberOfComponents = 3;
+
+	alglib::real_2d_array EX2, sigma2, DELTA2, EX1, sigma1, DELTA1;
+	EX2.setlength(param->nHide, numberOfComponents);
+	orthogonal_(EX2, param->nHide, numberOfComponents);
+	sigma2.setlength(numberOfComponents, numberOfComponents);
+	ones(sigma2, numberOfComponents);
+	DELTA2.setlength(param->nOutput, numberOfComponents);
+	orthogonal_(DELTA2, param->nOutput, numberOfComponents);
+	EX1.setlength(param->nInput, numberOfComponents);
+	orthogonal_(EX1, param->nInput, numberOfComponents);
+	sigma1.setlength(numberOfComponents, numberOfComponents);
+	ones(sigma1, numberOfComponents);
+	DELTA1.setlength(param->nHide, numberOfComponents);
+	orthogonal_(DELTA1, param->nHide, numberOfComponents);
+	// new code of sbpca by Yin on 12/17/2019
 	for (int i=1; i<=param->totalNumEpochs/param->interNumEpochs; i++) {
-		Train(param->numTrainImagesPerEpoch, param->interNumEpochs);
+		Train(param->numTrainImagesPerEpoch, param->interNumEpochs, batch_size, subBatchSize, numberOfComponents, EX1, sigma1, DELTA1, EX2, sigma2, DELTA2);
 		if (!param->useHardwareInTraining && param->useHardwareInTestingFF) { WeightToConductance(); }
 		Validate();
 		printf("Accuracy at %d epochs is : %.2f%\n", i*param->interNumEpochs, (double)correct/param->numMnistTestImages*100);
