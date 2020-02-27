@@ -45,6 +45,7 @@
 #include "Array.h"
 #include "Mapping.h"
 #include "NeuroSim.h"
+#include "src/linalg.h"
 
 extern Param *param;
 
@@ -72,7 +73,198 @@ extern Mux muxHO;
 extern RowDecoder muxDecoderHO;
 extern DFF dffHO;
 
-void Train(const int numTrain, const int epochs) {
+/*
+function slice
+functionality: same function as Python array slicing operation
+params:
+A: matrix you want to slice
+B: matrix after sliced
+row_start: start slicing row of A
+row_end: end slicing row of A
+col_start: start slicing column of A
+col_end: end slicing column of A
+return: void, sliced matrix directly stored in B
+*/
+void slice(alglib::real_2d_array A, alglib::real_2d_array &B, int row_start, int row_end, int col_start, int col_end){
+	for (int i = row_start; i < row_end; ++i){
+		for (int j = col_start; j < col_end; ++j){
+			B[i - row_start][j - col_start] = A[i][j];
+		}
+	}
+}
+
+/*
+function matrix_add
+functionality: matrix add operation
+params:
+A: first matrix
+B: second matrix
+m: first dimension of A
+n: second dimension of A
+return: matrix C = A + B
+*/
+alglib::real_2d_array matrix_add(alglib::real_2d_array A, alglib::real_2d_array B, int m, int n){
+	alglib::real_2d_array C;
+	C.setlength(m, n);
+	for (int i = 0; i < m; ++i){
+		for (int j = 0; j < n; ++j){
+			C[i][j] = A[i][j] + B[i][j];
+		}
+	}
+	return C;
+}
+
+/*
+function mul_c
+functionality: multiply a matrix by a constant c
+params:
+A: a matrix
+c: a constant
+m: first dimension of A
+n: second dimension of A
+return: matrix cA
+*/
+alglib::real_2d_array mul_c(alglib::real_2d_array A, double c, int m, int n){
+	alglib::real_2d_array B;
+	B.setlength(m, n);
+	for (int i = 0; i < m; ++i){
+		for (int j = 0; j < n; ++j){
+			B[i][j] = c * A[i][j];
+		}
+	}
+	return B;
+}
+
+/*
+function diag_hadamard
+functionality: use a matrix A multiply/divided by a diagonal matrix B and each row of A will be multiplied/divided by only diagonal elements of B
+params:
+A: a matrix
+B: a diagonal matrix
+m: first dimension of A
+n: second dimension of A; dimensions of B
+mode: 0, multiply; 1, divide
+return: matrix C = A / diag(B)
+*/
+alglib::real_2d_array diag_hadamard(alglib::real_2d_array A, alglib::real_2d_array B, int m, int n, int mode){
+	alglib::real_2d_array C;
+	C.setlength(m, n);
+	for (int i = 0; i < m; ++i){
+		for (int j = 0; j < n; ++j){
+			if (mode == 0){
+				C[i][j] = A[i][j] * B[j][j];
+			}
+			else{
+				C[i][j] = A[i][j] / B[j][j];
+			}
+		}
+	}
+	return C;
+}
+
+alglib::real_2d_array sign(alglib::real_2d_array A, int m, int n){
+	alglib::real_2d_array B;
+	B.setlength(m, n);
+	for (int i = 0; i < m; ++i){
+		for (int j = 0; j < n; ++j){
+			if (A[i][j] < 0){
+				B[i][j] = -1.0;
+			}
+			else if (A[i][j] == 0){
+				B[i][j] = 0.0;
+			}
+			else{
+				B[i][j] = 1.0;
+			}
+		}
+	}
+	return B;
+}
+
+void streamingPCA(std::vector<double> x, double delta[], alglib::real_2d_array &EX, alglib::real_2d_array &sigma, alglib::real_2d_array &DELTA, int batch_size, int subBatchSize, int m, int n, int numberOfComponents, alglib::real_2d_array &WGrad){
+	// convert vector to real_2d_array
+	alglib::real_2d_array x_array;
+	x_array.setlength(batch_size, m);
+	for (int i = 0; i < batch_size; ++i){
+		for (int j = 0; j < m; ++j){
+			x_array[i][j] = x[j];
+		}
+	}
+
+	// convert double array to real_2d_array
+	alglib::real_2d_array delta_array;
+	delta_array.setcontent(batch_size, n, delta);
+
+	for (int i = 0; i < batch_size / subBatchSize; ++i){
+		// slice
+		alglib::real_2d_array x_array_slice, delta_array_slice;
+		x_array_slice.setlength(subBatchSize, m);
+		delta_array_slice.setlength(subBatchSize, n);
+		slice(x_array, x_array_slice, i * subBatchSize, (i + 1) * subBatchSize, 0, m);
+		slice(delta_array, delta_array_slice, i * subBatchSize, (i + 1) * subBatchSize, 0, n);
+		
+		// calculate y
+		alglib::real_2d_array y;
+		y.setlength(subBatchSize, numberOfComponents);
+		alglib::rmatrixgemm(subBatchSize, numberOfComponents, n, 1.0 / ((i + 2) * subBatchSize), delta_array_slice, 0, 0, 0, DELTA, 0, 0, 0, 0, y, 0, 0);
+
+		// update EX
+		alglib::real_2d_array A, B;
+		A = EX;
+		B.setlength(m, numberOfComponents);
+		A = mul_c(A, (i + 1.0) / (i + 2), m, numberOfComponents);
+		alglib::rmatrixgemm(m, numberOfComponents, subBatchSize, 1.0, x_array_slice, 0, 0, 1, y, 0, 0, 0, 0, B, 0, 0);
+		B = diag_hadamard(B, sigma, m, numberOfComponents, 1);
+		EX = matrix_add(A, B, m, numberOfComponents);
+
+		// qr decomposition
+		A = EX;
+		alglib::real_1d_array tau;
+		alglib::real_2d_array Q, R, R_slice;
+		tau.setlength(numberOfComponents);
+		Q.setlength(m, numberOfComponents);
+		R.setlength(m, numberOfComponents);
+		R_slice.setlength(numberOfComponents, numberOfComponents);
+		alglib::rmatrixqr(A, m, numberOfComponents, tau);
+		alglib::rmatrixqrunpackq(A, m, numberOfComponents, tau, numberOfComponents, Q);
+		alglib::rmatrixqrunpackr(A, m, numberOfComponents, R);
+		slice(R, R_slice, 0, numberOfComponents, 0, numberOfComponents);
+		R_slice = sign(R_slice, numberOfComponents, numberOfComponents);
+		EX = diag_hadamard(Q, R_slice, m, numberOfComponents, 0);
+
+		// calculate z
+		alglib::real_2d_array z;
+		z.setlength(subBatchSize, numberOfComponents);
+		alglib::rmatrixgemm(subBatchSize, numberOfComponents, m, 1.0 / ((i + 2) * subBatchSize), x_array_slice, 0, 0, 0, EX, 0, 0, 0, 0, z, 0, 0);
+
+		// update DELTA
+		A = DELTA;
+		B.setlength(n, numberOfComponents);
+		A = mul_c(A, (i + 1.0) / (i + 2), n, numberOfComponents);
+		alglib::rmatrixgemm(n, numberOfComponents, subBatchSize, 1.0, delta_array_slice, 0, 0, 1, z, 0, 0, 0, 0, B, 0, 0);
+		B = diag_hadamard(B, sigma, n, numberOfComponents, 1);
+		DELTA = matrix_add(A, B, n, numberOfComponents);
+
+		// qr decomposition
+		A = DELTA;
+		tau.setlength(numberOfComponents);
+		Q.setlength(n, numberOfComponents);
+		R.setlength(n, numberOfComponents);
+		R_slice.setlength(numberOfComponents, numberOfComponents);
+		alglib::rmatrixqr(A, n, numberOfComponents, tau);
+		alglib::rmatrixqrunpackq(A, n, numberOfComponents, tau, numberOfComponents, Q);
+		alglib::rmatrixqrunpackr(A, n, numberOfComponents, R);
+		slice(R, R_slice, 0, numberOfComponents, 0, numberOfComponents);
+		R_slice = sign(R_slice, numberOfComponents, numberOfComponents);
+		DELTA = diag_hadamard(Q, R_slice, n, numberOfComponents, 0);
+
+		// update sigma
+		
+		
+	}
+}
+
+void Train(const int numTrain, const int epochs, int batch_size, int subBatchSize, int numberOfComponents, alglib::real_2d_array &EX1, alglib::real_2d_array &sigma1, alglib::real_2d_array &DELTA1, alglib::real_2d_array &EX2, alglib::real_2d_array &sigma2, alglib::real_2d_array &DELTA2) {
 	int numBatchReadSynapse;	// # of read synapses in a batch read operation (decide later)
 	int numBatchWriteSynapse;	// # of write synapses in a batch write operation (decide later)
 	double outN1[param->nHide]; // Net input to the hidden layer [param->nHide]
@@ -254,6 +446,13 @@ void Train(const int numTrain, const int epochs) {
 				int maxNumLevelLTP = static_cast<AnalogNVM*>(arrayIH->cell[0][0])->maxNumLevelLTP;
 				int maxNumLevelLTD = static_cast<AnalogNVM*>(arrayIH->cell[0][0])->maxNumLevelLTD;
 				numBatchWriteSynapse = (int)ceil((double)arrayIH->arrayColSize / param->numWriteColMuxed);
+				// new code of sbpca by Yin on 12/17/2019
+				alglib::real_2d_array W1Grad;
+				W1Grad.setlength(param->nHide, param->nInput);
+				streamingPCA(Input[i], s1, EX1, sigma1, DELTA1, batch_size, subBatchSize, param->nInput, param->nHide, numberOfComponents, W1Grad);
+				break;
+				//streamingPCA(a1, s2, EX2, sigma2, DELTA2, batch_size, subBatchSize, param->nHide, param->nOutput, numberOfComponents, W2Grad);
+				// new code of sbpca by Yin on 12/17/2019
 				#pragma omp parallel for reduction(+: sumArrayWriteEnergy, sumNeuroSimWriteEnergy)
 				for (int k = 0; k < param->nInput; k++) {
 					for (int j = 0; j < param->nHide; j+=numBatchWriteSynapse) {
