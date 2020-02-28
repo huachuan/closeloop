@@ -39,7 +39,7 @@
 .SECONDEXPANSION:
 
 MAINS := main.cpp
-ALLSRC := $(wildcard *.cpp NeuroSim/*.cpp)
+ALLSRC := $(wildcard *.cpp NeuroSim/*.cpp src/*.cpp)
 SRC := $(filter-out $(MAINS),$(ALLSRC))
 ALLOBJ := $(ALLSRC:.cpp=.o)
 OBJ := $(SRC:.cpp=.o)

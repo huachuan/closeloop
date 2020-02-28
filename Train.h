@@ -39,7 +39,9 @@
 #ifndef TRAIN_H_
 #define TRAIN_H_
 
-void Train(const int numTrain, const int epochs);
+#include "src/linalg.h"
+
+void Train(const int numTrain, const int epochs, int batch_size, int subBatchSize, int numberOfComponents, alglib::real_2d_array &EX1, alglib::real_2d_array &sigma1, alglib::real_2d_array &DELTA1, alglib::real_2d_array &EX2, alglib::real_2d_array &sigma2, alglib::real_2d_array &DELTA2);
 
 #endif
 

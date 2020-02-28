@@ -10,7 +10,8 @@ main.o: main.cpp Cell.h Array.h formula.h NeuroSim.h \
  NeuroSim/WLDecoderOutput.h NeuroSim/ReadCircuit.h \
  NeuroSim/SwitchMatrix.h NeuroSim/DFF.h NeuroSim/ShiftAdd.h \
  NeuroSim/Adder.h NeuroSim/Adder.h NeuroSim/Mux.h NeuroSim/RowDecoder.h \
- NeuroSim/DFF.h Param.h IO.h Train.h Test.h Mapping.h Definition.h
+ NeuroSim/DFF.h Param.h IO.h Train.h src/linalg.h src/ap.h \
+ src/alglibinternal.h src/alglibmisc.h Test.h Mapping.h Definition.h
 Mapping.o: Mapping.cpp Param.h Array.h Cell.h NeuroSim.h \
  NeuroSim/InputParameter.h NeuroSim/typedef.h NeuroSim/MemCell.h \
  NeuroSim/Technology.h NeuroSim/SubArray.h NeuroSim/InputParameter.h \
@@ -47,7 +48,8 @@ Train.o: Train.cpp formula.h Param.h Array.h Cell.h Mapping.h NeuroSim.h \
  NeuroSim/WLDecoderOutput.h NeuroSim/ReadCircuit.h \
  NeuroSim/SwitchMatrix.h NeuroSim/DFF.h NeuroSim/ShiftAdd.h \
  NeuroSim/Adder.h NeuroSim/Adder.h NeuroSim/Mux.h NeuroSim/RowDecoder.h \
- NeuroSim/DFF.h
+ NeuroSim/DFF.h src/linalg.h src/ap.h src/alglibinternal.h \
+ src/alglibmisc.h
 Adder.o: NeuroSim/Adder.cpp NeuroSim/constant.h NeuroSim/typedef.h \
  NeuroSim/formula.h NeuroSim/Technology.h NeuroSim/Adder.h \
  NeuroSim/InputParameter.h NeuroSim/MemCell.h NeuroSim/FunctionUnit.h
@@ -88,3 +90,34 @@ WLDecoderOutput.o: NeuroSim/WLDecoderOutput.cpp NeuroSim/constant.h \
  NeuroSim/formula.h NeuroSim/Technology.h NeuroSim/typedef.h \
  NeuroSim/WLDecoderOutput.h NeuroSim/InputParameter.h NeuroSim/MemCell.h \
  NeuroSim/FunctionUnit.h
+alglibinternal.o: src/alglibinternal.cpp src/stdafx.h \
+ src/alglibinternal.h src/ap.h
+alglibmisc.o: src/alglibmisc.cpp src/stdafx.h src/alglibmisc.h src/ap.h \
+ src/alglibinternal.h
+ap.o: src/ap.cpp src/stdafx.h src/ap.h
+dataanalysis.o: src/dataanalysis.cpp src/stdafx.h src/dataanalysis.h \
+ src/ap.h src/alglibinternal.h src/alglibmisc.h src/linalg.h \
+ src/statistics.h src/specialfunctions.h src/solvers.h src/optimization.h
+diffequations.o: src/diffequations.cpp src/stdafx.h src/diffequations.h \
+ src/ap.h src/alglibinternal.h
+fasttransforms.o: src/fasttransforms.cpp src/stdafx.h \
+ src/fasttransforms.h src/ap.h src/alglibinternal.h
+integration.o: src/integration.cpp src/stdafx.h src/integration.h \
+ src/ap.h src/alglibinternal.h src/alglibmisc.h src/linalg.h \
+ src/specialfunctions.h
+interpolation.o: src/interpolation.cpp src/stdafx.h src/interpolation.h \
+ src/ap.h src/alglibinternal.h src/alglibmisc.h src/linalg.h \
+ src/optimization.h src/solvers.h src/specialfunctions.h \
+ src/integration.h
+linalg.o: src/linalg.cpp src/stdafx.h src/linalg.h src/ap.h \
+ src/alglibinternal.h src/alglibmisc.h
+optimization.o: src/optimization.cpp src/stdafx.h src/optimization.h \
+ src/ap.h src/alglibinternal.h src/linalg.h src/alglibmisc.h \
+ src/solvers.h
+solvers.o: src/solvers.cpp src/stdafx.h src/solvers.h src/ap.h \
+ src/alglibinternal.h src/alglibmisc.h src/linalg.h
+specialfunctions.o: src/specialfunctions.cpp src/stdafx.h \
+ src/specialfunctions.h src/ap.h src/alglibinternal.h
+statistics.o: src/statistics.cpp src/stdafx.h src/statistics.h src/ap.h \
+ src/alglibinternal.h src/linalg.h src/alglibmisc.h \
+ src/specialfunctions.h
