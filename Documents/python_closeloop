@@ -1,0 +1,141 @@
+def _fit_stochastic(self, X, y, activations, deltas, coef_grads,
+                        intercept_grads, layer_units, incremental):
+
+        if not incremental or not hasattr(self, '_optimizer'):
+            params = self.coefs_ + self.intercepts_
+
+            if self.solver == 'sgd':
+                self._optimizer = SGDOptimizer(
+                    params, self.learning_rate_init, self.learning_rate,
+                    self.momentum, self.nesterovs_momentum, self.power_t, self.asymmetry, self.powerlaw)
+            elif self.solver == 'adam':
+                self._optimizer = AdamOptimizer(
+                    params, self.learning_rate_init, self.beta_1, self.beta_2,
+                    self.epsilon)
+
+        # early_stopping in partial_fit doesn't make sense
+        early_stopping = self.early_stopping and not incremental
+        if early_stopping:
+            X, X_val, y, y_val = train_test_split(
+                X, y, random_state=self._random_state,
+                test_size=self.validation_fraction)
+            if is_classifier(self):
+                y_val = self._label_binarizer.inverse_transform(y_val)
+        else:
+            X_val = None
+            y_val = None
+
+        n_samples = X.shape[0]
+
+        if self.batch_size == 'auto':
+            batch_size = min(200, n_samples)
+        else:
+            batch_size = np.clip(self.batch_size, 1, n_samples)
+
+        try:
+            for it in range(self.max_iter):
+                X, y = shuffle(X, y, random_state=self._random_state)
+                accumulated_loss = 0.0
+
+                if batch_size > 1 and self.decomposition==True:
+
+                    if self.pca==False:
+                       
+                        krank = self.krank
+                        asymmetry = self.asymmetry
+                       
+                        for batch_slice in gen_batches(n_samples, batch_size):
+                            activations[0] = X[batch_slice]
+
+                            batch_loss, coef_grads, intercept_grads = self._backprop(
+                                X[batch_slice], y[batch_slice], activations, deltas,
+                                coef_grads, intercept_grads)
+                            #try:
+                            #intvar = np.asarray(intercept_grads)
+                            #print (intvar)
+                            for iterator in range(len(layer_units) - 1):
+                                u, v, s = retrievevectors(svd=None, a=coef_grads[iterator], r=krank)
+                                #print("svec is", s)
+                                for x in range(krank):
+                                    u[x]=-u[x]
+                                    #v[x]=v[x]
+                                coefs = np.array(self.coefs_[iterator])
+                                coefsStar = np.array(self.coefs_[iterator])
+                                v2 = np.zeros(v.shape)
+                                intercept_grads[iterator] = intercept_grads[iterator] *self.learning_rate_init
+
+                                #for x in range(krank):
+                                    #intercept_grads[iterator] = intercept_grads[iterator] - v[x]*s[x]
+                                #intvar2 = np.asarray(intercept_grads)
+                                #print (intvar2)
+                                for x in range(krank):
+                                    coefsStar=coefsStar+HTORR(np.outer(u[krank-1-x]*self.learning_rate_init*s[krank-1-x],v[krank-1-x]),coefsStar, asymmetry)
+                                    coefsStar = np.clip(coefsStar, a_min =-1, a_max = 1)
+                                 
+                                for i in range(3):
+                                    for x in range(krank):
+                                        ex = (u[krank-1-x]*self.learning_rate_init*s[krank-1-x] - np.dot((coefsStar-coefs),v[krank-1-x]))
+                                        dele = (v[krank-1-x]*self.learning_rate_init*s[krank-1-x] + np.dot(u[krank-1-x],(coefsStar-coefs)))
+                                        coefsStar = HTORR((np.outer(ex,dele)/(s[krank-1-x]**1)),coefsStar, asymmetry) + coefsStar
+                                        coefsStar = np.clip(coefsStar, a_min =-1, a_max = 1)
+                                        ex2 = (u[krank-1-x]*self.learning_rate_init*s[krank-1-x] + np.dot((coefsStar-coefs),v[krank-1-x]))
+                                        dele2 = (v[krank-1-x]*self.learning_rate_init*s[krank-1-x] - np.dot(u[krank-1-x],(coefsStar-coefs)))
+                                        coefsStar = HTORR((np.outer(ex2,dele2)/(s[krank-1-x]**1)),coefsStar, asymmetry) + coefsStar
+                                        coefsStar = np.clip(coefsStar, a_min =-1, a_max = 1)
+                                        #if self.learning_rate_init !=  0.001:
+                                            #print(self.learning_rate_init)
+                       
+                                coef_grads[iterator] = coefs - coefsStar
+                                #print(coef_grads[iterator])
+                               
+                               
+                                #self.coefs_[iterator] = coefsStar
+                                #self.intercepts_[iterator] = self.intercepts_[iterator]#+self.learning_rate_init*intercept_grads[iterator]
+                                   
+                            accumulated_loss += batch_loss * (batch_slice.stop -
+                                                                batch_slice.start)
+                           
+                               
+                                                               
+
+                            grads = coef_grads + intercept_grads
+                           
+                            self._optimizer.update_params_PCA(grads)
+                           
+                            #self._optimizer.update_params(grads)
+                            #except:
+                                #print("SVD didn't converge")
+                    else:
+                        p =1
+                        for batch_slice in gen_batches(n_samples, batch_size):
+                            activations[0] = X[batch_slice]
+
+                            #batch_loss, coef_grads2, intercept_grads2 = self._backprop(
+                                #X[batch_slice], y[batch_slice], activations, deltas,
+                                #coef_grads, intercept_grads)
+                            # for iterator in range(len(layer_units) - 1):
+                            # coef_grads2[iterator] = low_rank_approx(svd=None, a=coef_grads2[iterator], r=1)
+                            #coef_grads3 = coef_grads2.copy()
+
+                            batch_loss, coef_grads, intercept_grads, self.pcaactivation, self.pcadelta = self._backpropPCA(
+                                X[batch_slice], y[batch_slice], activations, deltas,
+                                coef_grads, intercept_grads, self.pcaactivation, self.pcadelta)
+
+
+                            accumulated_loss += batch_loss * (batch_slice.stop -
+                                                              batch_slice.start)
+
+
+                            #for iterator in range(len(layer_units) - 1):
+                                #if it == 1:
+                                #u, v, s = retrievevectors(svd=None, a=coef_grads3[iterator], r=1)
+                                    #print(safe_sparse_dot(u,self.pcaactivation[iterator]))
+                                    #print(np.dot(v, self.pcadelta[iterator]))
+                                    #print(s/self.sdelta[iterator])
+                            #coef_grads[iterator] = np.multiply(coef_grads[iterator], s)
+                            #coef_grads[iterator] = low_rank_approx(svd=None, a=coef_grads2[iterator], r=1)
+                            #tag
+
+                            grads = coef_grads + intercept_grads
+
+                            self._optimizer.update_params_PCA(grads)
